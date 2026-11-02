@@ -4,25 +4,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lector de inventario EraRelmo</title>
+<title>Inventario EraRelmo</title>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <style>
 *{box-sizing:border-box}
+
 body{
  margin:0;
  background:#f3f5f8;
  color:#17212b;
  font:16px system-ui,sans-serif;
 }
+
 header{
  background:#17212b;
  color:white;
  padding:22px;
 }
+
 header h2{margin:0 0 5px}
+
 main{max-width:620px;margin:auto;padding:14px}
+
 .card{
  background:white;
  border:1px solid #e1e6ed;
@@ -30,6 +35,7 @@ main{max-width:620px;margin:auto;padding:14px}
  padding:16px;
  margin:12px 0;
 }
+
 button{
  border:0;
  border-radius:11px;
@@ -41,49 +47,107 @@ button{
  font-size:16px;
  cursor:pointer;
 }
+
+button:disabled{
+ opacity:.5;
+ cursor:not-allowed;
+}
+
 input{
  padding:13px;
  border:1px solid #ccd4df;
  border-radius:11px;
  font-size:16px;
  min-width:0;
- flex:1;
  width:100%;
 }
+
 .row{display:flex;gap:8px}
+
 #reader video{width:100%!important}
+
 #status{
  white-space:pre-wrap;
  color:#596579;
  font-size:14px;
  margin-top:10px;
 }
+
 .error{color:#b42318!important}
+.success{color:#16865b!important}
+
 .result{display:none}
+
 .grid{
  display:grid;
  grid-template-columns:1fr 1fr;
  gap:8px;
 }
+
 .field{
  background:#f2f5f8;
  padding:10px;
  border-radius:9px;
  overflow-wrap:anywhere;
 }
+
 .field small{
  display:block;
  color:#667085;
+ margin-bottom:4px;
 }
+
+.field b{font-size:15px}
+
+.stock{
+ background:#e9f7ef;
+ border:1px solid #c5e9d3;
+ padding:16px;
+ border-radius:12px;
+ margin-top:14px;
+ text-align:center;
+}
+
+.stock small{
+ display:block;
+ color:#397451;
+}
+
+.stock strong{
+ display:block;
+ color:#16865b;
+ font-size:30px;
+ margin-top:4px;
+}
+
+.withdraw{
+ border-top:1px solid #e1e6ed;
+ margin-top:18px;
+ padding-top:18px;
+}
+
+.withdraw label{
+ display:block;
+ font-weight:bold;
+ margin-bottom:8px;
+}
+
+.withdraw button{margin-top:10px}
+
 h2{font-size:18px;margin:0 0 12px}
+
+@media(max-width:420px){
+ .row{flex-direction:column}
+ .grid{grid-template-columns:1fr 1fr}
+}
 </style>
 </head>
 
 <body>
 
 <header>
-<h2>⌁ Lector de inventario</h2>
-Escanea un código y consulta su ficha de producto
+<h2>⌁ Inventario EraRelmo</h2>
+Control de existencias y retiros en libras
 </header>
 
 <main>
@@ -96,7 +160,8 @@ Escanea un código y consulta su ficha de producto
 
 <button id="start">Activar cámara</button>
 
-<button id="stop" style="display:none;background:#e8eefc;color:#185adb;margin-top:8px">
+<button id="stop"
+ style="display:none;background:#e8eefc;color:#185adb;margin-top:8px">
 Detener cámara
 </button>
 
@@ -104,17 +169,20 @@ Detener cámara
 </section>
 
 <section class="card">
-<h2>Buscar manualmente</h2>
+<h2>Buscar producto</h2>
+
 <div class="row">
-<input id="manual" placeholder="ER-000001">
+<input id="manual" placeholder="Ej. ER-000001">
 <button id="search" style="width:auto">Buscar</button>
 </div>
 </section>
 
 <section class="card result" id="result">
+
 <h2 id="code"></h2>
 
 <div class="grid">
+
 <div class="field">
 <small>Producto</small>
 <b id="product"></b>
@@ -131,12 +199,12 @@ Detener cámara
 </div>
 
 <div class="field">
-<small>Peso</small>
+<small>Peso de ingreso</small>
 <b id="weight"></b>
 </div>
 
 <div class="field">
-<small>Fecha</small>
+<small>Fecha de ingreso</small>
 <b id="date"></b>
 </div>
 
@@ -144,72 +212,99 @@ Detener cámara
 <small>Observaciones</small>
 <b id="notes"></b>
 </div>
+
 </div>
+
+<div class="stock">
+<small>EXISTENCIA DISPONIBLE</small>
+<strong id="stock">0 lb</strong>
+</div>
+
+<div class="withdraw">
+
+<h2>Registrar retiro</h2>
+
+<label for="pounds">
+¿Cuántas libras vas a retirar?
+</label>
+
+<input
+ id="pounds"
+ type="number"
+ min="0.01"
+ step="0.01"
+ placeholder="Ej. 25"
+>
+
+<button id="confirmWithdraw">
+Confirmar retiro
+</button>
+
+<div id="withdrawStatus" style="margin-top:12px;font-size:14px"></div>
+
+</div>
+
 </section>
 
 </main>
 
 <script>
-const API='https://erarelmo-inventario-api.mercadeo-6c7.workers.dev';
 
-const $=id=>document.getElementById(id);
+const API =
+'https://erarelmo-inventario-api.mercadeo-6c7.workers.dev';
 
-let scanner=null;
-let running=false;
-let busy=false;
-let last='';
+const $ = id => document.getElementById(id);
 
-function status(t,err=false){
- $('status').textContent=t;
- $('status').className=err?'error':'';
+let scanner = null;
+let running = false;
+let busy = false;
+let submitting = false;
+let currentProduct = null;
+
+function status(message,error=false){
+ $('status').textContent = message;
+ $('status').className = error ? 'error' : '';
 }
 
-function handleInventoryResponse(x){
-
- busy=false;
-
- if(!x||!x.ok){
-  $('result').style.display='none';
-  status(x?.error||'No se encontró el código.',true);
-  return;
- }
-
- let r=x.product;
-
- $('code').textContent=r.code;
- $('product').textContent=r.product||'—';
- $('brand').textContent=r.brand||'—';
- $('gauge').textContent=r.gauge||'—';
-
- $('weight').textContent=
- Number(r.weight).toLocaleString('es-GT')+' kg';
-
- $('date').textContent=r.date||'—';
- $('notes').textContent=r.notes||'—';
-
- $('result').style.display='block';
-
- status('Producto encontrado correctamente.');
+function withdrawMessage(message,error=false){
+ $('withdrawStatus').textContent = message;
+ $('withdrawStatus').className =
+ error ? 'error' : 'success';
 }
 
-async function lookup(c){
+function formatPounds(value){
+ return Number(value || 0).toLocaleString(
+  'es-GT',
+  {minimumFractionDigits:2,maximumFractionDigits:2}
+ )+' lb';
+}
 
- c=String(c||'').trim().toUpperCase();
 
- if(!c){
+/************************************************
+ * CONSULTAR PRODUCTO
+ ************************************************/
+
+async function lookup(code){
+
+ code = String(code || '').trim().toUpperCase();
+
+ if(!code){
   status('Escribe o escanea un código.',true);
   return;
  }
 
  if(busy)return;
 
- busy=true;
+ busy = true;
  status('Consultando inventario…');
+
+ $('result').style.display = 'none';
+ currentProduct = null;
 
  try{
 
-  const response=await fetch(
-   API+'?code='+encodeURIComponent(c)+'&_='+Date.now(),
+  const response = await fetch(
+   API+'?code='+encodeURIComponent(code)+'&_='+Date.now(),
    {method:'GET',cache:'no-store'}
   );
 
@@ -217,36 +312,184 @@ async function lookup(c){
    throw new Error('Error del servidor: '+response.status);
   }
 
-  const data=await response.json();
+  const data = await response.json();
 
-  handleInventoryResponse(data);
+  if(!data || !data.ok || !data.product){
+   throw new Error(data?.error || 'Producto no encontrado.');
+  }
 
- }catch(e){
+  showProduct(data.product);
 
-  busy=false;
+  status('Producto encontrado correctamente.');
 
-  status('No se pudo conectar con el inventario: '+e.message,true);
+ }catch(error){
+
+  $('result').style.display = 'none';
+  status(error.message,true);
+
+ }finally{
+
+  busy = false;
+
  }
+
 }
 
-function scanned(c){
 
- c=String(c||'').trim();
+/************************************************
+ * MOSTRAR PRODUCTO Y EXISTENCIAS
+ ************************************************/
 
- if(!c||c===last||busy)return;
+function showProduct(r){
 
- last=c;
- $('manual').value=c;
+ currentProduct = r;
 
- lookup(c);
+ $('code').textContent = r.code;
+ $('product').textContent = r.product || '—';
+ $('brand').textContent = r.brand || '—';
+ $('gauge').textContent = r.gauge || '—';
+
+ $('weight').textContent = formatPounds(r.weight);
+ $('stock').textContent = formatPounds(r.stock);
+
+ $('date').textContent = r.date || '—';
+ $('notes').textContent = r.notes || '—';
+
+ $('pounds').value = '';
+ $('withdrawStatus').textContent = '';
+
+ $('result').style.display = 'block';
+
+ $('confirmWithdraw').disabled =
+  Number(r.stock) <= 0;
+
+}
+
+
+/************************************************
+ * REGISTRAR RETIRO
+ ************************************************/
+
+async function confirmWithdraw(){
+
+ if(submitting)return;
+
+ if(!currentProduct){
+  withdrawMessage('Primero consulta un producto.',true);
+  return;
+ }
+
+ const pounds = Number($('pounds').value);
+ const available = Number(currentProduct.stock);
+
+ if(!Number.isFinite(pounds) || pounds <= 0){
+  withdrawMessage('Ingresa una cantidad válida de libras.',true);
+  return;
+ }
+
+ if(pounds > available){
+  withdrawMessage(
+   'No hay suficientes existencias. Disponible: '+
+   formatPounds(available),
+   true
+  );
+  return;
+ }
+
+ const confirmed = window.confirm(
+  '¿Confirmas retirar '+formatPounds(pounds)+
+  ' del producto '+currentProduct.code+'?'
+ );
+
+ if(!confirmed)return;
+
+ submitting = true;
+
+ const button = $('confirmWithdraw');
+ button.disabled = true;
+ button.textContent = 'Registrando retiro…';
+
+ withdrawMessage('Guardando movimiento…');
+
+ try{
+
+  const response = await fetch(API,{
+   method:'POST',
+   headers:{
+    'Content-Type':'application/json'
+   },
+   body:JSON.stringify({
+    code:currentProduct.code,
+    pounds:pounds
+   })
+  });
+
+  const data = await response.json();
+
+  if(!response.ok || !data.ok){
+   throw new Error(data.error || 'No se pudo registrar el retiro.');
+  }
+
+  currentProduct.stock = Number(data.stock);
+
+  $('stock').textContent = formatPounds(data.stock);
+
+  $('pounds').value = '';
+
+  withdrawMessage(
+   '¡Retiro registrado correctamente! Se retiraron '+
+   formatPounds(data.withdrawn)+
+   '. Existencia restante: '+formatPounds(data.stock)
+  );
+
+  button.disabled = Number(data.stock) <= 0;
+
+ }catch(error){
+
+  withdrawMessage(error.message,true);
+
+ }finally{
+
+  submitting = false;
+  button.textContent = 'Confirmar retiro';
+
+  if(currentProduct){
+   button.disabled = Number(currentProduct.stock) <= 0;
+  }
+
+ }
+
+}
+
+
+/************************************************
+ * ESCANEAR CÓDIGO
+ ************************************************/
+
+function scanned(code){
+
+ code = String(code || '').trim().toUpperCase();
+
+ if(!code || busy)return;
+
+ $('manual').value = code;
+
  stop();
+
+ lookup(code);
+
 }
+
+
+/************************************************
+ * ACTIVAR CÁMARA
+ ************************************************/
 
 async function start(){
 
  try{
 
-  if(!window.isSecureContext||
+  if(!window.isSecureContext ||
      !navigator.mediaDevices?.getUserMedia){
    throw Error('La cámara requiere HTTPS y permisos del navegador.');
   }
@@ -255,7 +498,7 @@ async function start(){
    throw Error('No cargó el lector. Recarga la página.');
   }
 
-  scanner=new Html5Qrcode('reader');
+  scanner = new Html5Qrcode('reader');
 
   await scanner.start(
    {facingMode:'environment'},
@@ -276,46 +519,69 @@ async function start(){
    ()=>{}
   );
 
-  running=true;
+  running = true;
 
-  $('start').style.display='none';
-  $('stop').style.display='block';
+  $('start').style.display = 'none';
+  $('stop').style.display = 'block';
 
   status('Cámara activa. Enfoca el código.');
 
- }catch(e){
+ }catch(error){
 
-  status('Error de cámara: '+(e.name||'')+' '+e.message,true);
+  status('Error de cámara: '+error.message,true);
+
  }
+
 }
+
+
+/************************************************
+ * DETENER CÁMARA
+ ************************************************/
 
 async function stop(){
 
- if(scanner){
+ const activeScanner = scanner;
+
+ scanner = null;
+ running = false;
+
+ if(activeScanner){
 
   try{
-   if(running)await scanner.stop();
-   await scanner.clear();
-  }catch(e){}
+   await activeScanner.stop();
+  }catch(error){}
+
+  try{
+   await activeScanner.clear();
+  }catch(error){}
 
  }
 
- scanner=null;
- running=false;
+ $('start').style.display = 'block';
+ $('stop').style.display = 'none';
 
- $('start').style.display='block';
- $('stop').style.display='none';
 }
 
-$('start').onclick=start;
-$('stop').onclick=stop;
 
-$('search').onclick=()=>lookup($('manual').value);
+/************************************************
+ * BOTONES Y EVENTOS
+ ************************************************/
 
-$('manual').onkeydown=e=>{
- if(e.key==='Enter')lookup($('manual').value);
+$('start').onclick = start;
+$('stop').onclick = stop;
+
+$('search').onclick = () => lookup($('manual').value);
+
+$('manual').onkeydown = event => {
+ if(event.key === 'Enter'){
+  lookup($('manual').value);
+ }
 };
 
+$('confirmWithdraw').onclick = confirmWithdraw;
+
 </script>
+
 </body>
 </html>
