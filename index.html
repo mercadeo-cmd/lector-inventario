@@ -1,17 +1,296 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lector de inventario</title><script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script><style>
-*{box-sizing:border-box}body{margin:0;background:#f3f5f8;color:#17212b;font:16px system-ui}header{background:#17212b;color:white;padding:22px}main{max-width:620px;margin:auto;padding:14px}.card{background:white;border:1px solid #e1e6ed;border-radius:16px;padding:16px;margin:12px 0}button{border:0;border-radius:11px;padding:14px;background:#185adb;color:white;font-weight:bold;width:100%;font-size:16px}input{padding:13px;border:1px solid #ccd4df;border-radius:11px;font-size:16px;min-width:0;flex:1}.row{display:flex;gap:8px}#reader video{width:100%!important}#status{white-space:pre-wrap;color:#596579;font-size:14px;margin-top:10px}.error{color:#b42318!important}.result{display:none}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{background:#f2f5f8;padding:10px;border-radius:9px}.field small{display:block;color:#667085}.field b{overflow-wrap:anywhere}h2{font-size:18px;margin:0 0 12px}</style></head><body>
-<header><h2>⌁ Lector de inventario</h2>Escanea un código y consulta su ficha de producto</header><main>
-<section class="card"><h2>Escáner de cámara</h2><p>Activa la cámara trasera y enfoca el código.</p><div id="reader"></div><button id="start">Activar cámara</button><button id="stop" style="display:none;background:#e8eefc;color:#185adb;margin-top:8px">Detener</button><div id="status">Preparado.</div></section>
-<section class="card"><h2>Buscar manualmente</h2><div class="row"><input id="manual" placeholder="ER-000001"><button id="search" style="width:auto">Buscar</button></div></section>
-<section class="card result" id="result"><h2 id="code"></h2><div class="grid"><div class="field"><small>Producto</small><b id="product"></b></div><div class="field"><small>Marca</small><b id="brand"></b></div><div class="field"><small>Calibre</small><b id="gauge"></b></div><div class="field"><small>Peso</small><b id="weight"></b></div><div class="field"><small>Fecha</small><b id="date"></b></div><div class="field"><small>Observaciones</small><b id="notes"></b></div></div></section>
-</main><script>
-const API='https://erarelmo-inventario-api.mercadeo-6c7.workers.dev';
-const $=id=>document.getElementById(id);let scanner=null,running=false,busy=false,last='';
-function status(t,err=false){$('status').textContent=t;$('status').className=err?'error':''}
-function handleInventoryResponse(x){busy=false;if(!x||!x.ok){$('result').style.display='none';status(x?.error||'No se encontró el código.',true);return}let r=x.product;$('code').textContent=r.code;$('product').textContent=r.product||'—';$('brand').textContent=r.brand||'—';$('gauge').textContent=r.gauge||'—';$('weight').textContent=Number(r.weight).toLocaleString('es-GT')+' kg';$('date').textContent=r.date||'—';$('notes').textContent=r.notes||'—';$('result').style.display='block';status('Producto encontrado.')}
-function lookup(c){c=String(c||'').trim().toUpperCase();if(!c)return status('Escribe o escanea un código.',true);if(busy)return;busy=true;status('Consultando inventario…');let old=$('jsonp');if(old)old.remove();let s=document.createElement('script');s.id='jsonp';s.onerror=()=>{busy=false;status('No se pudo conectar con Google Sheets. Revisa la implementación.',true)};s.src=API+'?api=lookup&code='+encodeURIComponent(c)+'&callback=handleInventoryResponse&_='+Date.now();document.body.appendChild(s)}
-function scanned(c){c=String(c||'').trim();if(!c||c===last||busy)return;last=c;$('manual').value=c;lookup(c);stop()}
-async function start(){try{if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw Error('La cámara requiere HTTPS y permisos del navegador.');if(!window.Html5Qrcode)throw Error('No cargó el lector. Recarga la página.');scanner=new Html5Qrcode('reader');await scanner.start({facingMode:'environment'},{fps:10,qrbox:(w,h)=>({width:Math.min(320,w-20),height:130}),formatsToSupport:[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8]},scanned,()=>{});running=true;$('start').style.display='none';$('stop').style.display='block';status('Cámara activa. Enfoca el código.')}catch(e){status('Error de cámara: '+(e.name||'')+' '+e.message,true)}}
-async function stop(){if(scanner){try{if(running)await scanner.stop();await scanner.clear()}catch(e){}}scanner=null;running=false;$('start').style.display='block';$('stop').style.display='none'}
-$('start').onclick=start;$('stop').onclick=stop;$('search').onclick=()=>lookup($('manual').value);$('manual').onkeydown=e=>{if(e.key==='Enter')lookup($('manual').value)};
-</script></main></body></html>
+
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lector de inventario</title>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f5f8;color:#17212b;font:16px system-ui}
+header{background:#17212b;color:white;padding:22px}
+main{max-width:620px;margin:auto;padding:14px}
+.card{background:white;border:1px solid #e1e6ed;border-radius:16px;padding:16px;margin:12px 0}
+button{border:0;border-radius:11px;padding:14px;background:#185adb;color:white;font-weight:bold;width:100%;font-size:16px;cursor:pointer}
+input{padding:13px;border:1px solid #ccd4df;border-radius:11px;font-size:16px;min-width:0;flex:1}
+.row{display:flex;gap:8px}
+#reader video{width:100%!important}
+#status{white-space:pre-wrap;color:#596579;font-size:14px;margin-top:10px}
+.error{color:#b42318!important}
+.result{display:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{background:#f2f5f8;padding:10px;border-radius:9px}
+.field small{display:block;color:#667085}
+.field b{overflow-wrap:anywhere}
+h2{font-size:18px;margin:0 0 12px}
+</style>
+</head>
+
+<body>
+
+<header>
+<h2>⌁ Lector de inventario</h2>
+Escanea un código y consulta su ficha de producto
+</header>
+
+<main>
+
+<section class="card">
+<h2>Escáner de cámara</h2>
+<p>Activa la cámara trasera y enfoca el código.</p>
+
+<div id="reader"></div>
+
+<button id="start">Activar cámara</button>
+
+<button id="stop" style="display:none;background:#e8eefc;color:#185adb;margin-top:8px">
+Detener
+</button>
+
+<div id="status">Preparado.</div>
+</section>
+
+<section class="card">
+<h2>Buscar manualmente</h2>
+
+<div class="row">
+<input id="manual" placeholder="ER-000001">
+<button id="search" style="width:auto">Buscar</button>
+</div>
+</section>
+
+<section class="card result" id="result">
+<h2 id="code"></h2>
+
+<div class="grid">
+
+<div class="field">
+<small>Producto</small>
+<b id="product"></b>
+</div>
+
+<div class="field">
+<small>Marca</small>
+<b id="brand"></b>
+</div>
+
+<div class="field">
+<small>Calibre</small>
+<b id="gauge"></b>
+</div>
+
+<div class="field">
+<small>Peso</small>
+<b id="weight"></b>
+</div>
+
+<div class="field">
+<small>Fecha</small>
+<b id="date"></b>
+</div>
+
+<div class="field">
+<small>Observaciones</small>
+<b id="notes"></b>
+</div>
+
+</div>
+</section>
+
+</main>
+
+<script>
+
+// CONEXIÓN CON CLOUDFLARE
+const API = 'https://erarelmo-inventario-api.mercadeo-6c7.workers.dev';
+
+const $ = id => document.getElementById(id);
+
+let scanner = null;
+let running = false;
+let busy = false;
+let last = '';
+
+// MENSAJES
+function status(t, err = false) {
+  $('status').textContent = t;
+  $('status').className = err ? 'error' : '';
+}
+
+// MOSTRAR PRODUCTO
+function handleInventoryResponse(x) {
+
+  busy = false;
+
+  if (!x || !x.ok) {
+    $('result').style.display = 'none';
+    status(x?.error || 'No se encontró el código.', true);
+    return;
+  }
+
+  let r = x.product;
+
+  $('code').textContent = r.code;
+  $('product').textContent = r.product || '—';
+  $('brand').textContent = r.brand || '—';
+  $('gauge').textContent = r.gauge || '—';
+  $('weight').textContent = Number(r.weight).toLocaleString('es-GT') + ' kg';
+  $('date').textContent = r.date || '—';
+  $('notes').textContent = r.notes || '—';
+
+  $('result').style.display = 'block';
+
+  status('Producto encontrado.');
+}
+
+// BUSCAR EN GOOGLE SHEETS A TRAVÉS DE CLOUDFLARE
+async function lookup(c) {
+
+  c = String(c || '').trim().toUpperCase();
+
+  if (!c) {
+    status('Escribe o escanea un código.', true);
+    return;
+  }
+
+  if (busy) return;
+
+  busy = true;
+
+  status('Consultando inventario...');
+
+  $('result').style.display = 'none';
+
+  try {
+
+    const response = await fetch(
+      API + '?code=' + encodeURIComponent(c) + '&_=' + Date.now(),
+      {
+        method: 'GET',
+        cache: 'no-store'
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Error HTTP: ' + response.status);
+    }
+
+    const data = await response.json();
+
+    handleInventoryResponse(data);
+
+  } catch (error) {
+
+    busy = false;
+
+    status(
+      'No se pudo conectar con el inventario: ' + error.message,
+      true
+    );
+
+  }
+}
+
+// LECTURA DEL CÓDIGO DE BARRAS
+function scanned(c) {
+
+  c = String(c || '').trim();
+
+  if (!c || c === last || busy) return;
+
+  last = c;
+
+  $('manual').value = c;
+
+  lookup(c);
+
+  stop();
+}
+
+// ACTIVAR CÁMARA
+async function start() {
+
+  try {
+
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      throw Error('La cámara requiere HTTPS y permisos del navegador.');
+    }
+
+    if (!window.Html5Qrcode) {
+      throw Error('No cargó el lector. Recarga la página.');
+    }
+
+    scanner = new Html5Qrcode('reader');
+
+    await scanner.start(
+      { facingMode: 'environment' },
+      {
+        fps: 10,
+        qrbox: (w, h) => ({
+          width: Math.min(320, w - 20),
+          height: 130
+        }),
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8
+        ]
+      },
+      scanned,
+      () => {}
+    );
+
+    running = true;
+
+    $('start').style.display = 'none';
+    $('stop').style.display = 'block';
+
+    status('Cámara activa.\nEnfoca el código.');
+
+  } catch (e) {
+
+    status('Error de cámara: ' + (e.name || '') + ' ' + e.message, true);
+
+  }
+}
+
+// DETENER CÁMARA
+async function stop() {
+
+  if (scanner) {
+
+    try {
+
+      if (running) await scanner.stop();
+
+      await scanner.clear();
+
+    } catch (e) {}
+
+  }
+
+  scanner = null;
+  running = false;
+
+  $('start').style.display = 'block';
+  $('stop').style.display = 'none';
+}
+
+// BOTONES Y BÚSQUEDA MANUAL
+$('start').onclick = start;
+$('stop').onclick = stop;
+
+$('search').onclick = () => lookup($('manual').value);
+
+$('manual').onkeydown = e => {
+  if (e.key === 'Enter') lookup($('manual').value);
+};
+
+</script>
+
+</body>
+</html>
