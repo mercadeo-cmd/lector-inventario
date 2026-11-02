@@ -5,7 +5,7 @@
 <section class="card"><h2>Buscar manualmente</h2><div class="row"><input id="manual" placeholder="ER-000001"><button id="search" style="width:auto">Buscar</button></div></section>
 <section class="card result" id="result"><h2 id="code"></h2><div class="grid"><div class="field"><small>Producto</small><b id="product"></b></div><div class="field"><small>Marca</small><b id="brand"></b></div><div class="field"><small>Calibre</small><b id="gauge"></b></div><div class="field"><small>Peso</small><b id="weight"></b></div><div class="field"><small>Fecha</small><b id="date"></b></div><div class="field"><small>Observaciones</small><b id="notes"></b></div></div></section>
 </main><script>
-const API='https://script.google.com/macros/s/AKfycbx1j43rotPNWkRsDqKFt7od0QnoIzHMpYiFnL1z5Czwlvk9Eld5k4CspkVEwAQbiUhU/exec';
+const API='https://erarelmo-inventario-api.mercadeo-6c7.workers.dev';
 const $=id=>document.getElementById(id);let scanner=null,running=false,busy=false,last='';
 function status(t,err=false){$('status').textContent=t;$('status').className=err?'error':''}
 function handleInventoryResponse(x){busy=false;if(!x||!x.ok){$('result').style.display='none';status(x?.error||'No se encontró el código.',true);return}let r=x.product;$('code').textContent=r.code;$('product').textContent=r.product||'—';$('brand').textContent=r.brand||'—';$('gauge').textContent=r.gauge||'—';$('weight').textContent=Number(r.weight).toLocaleString('es-GT')+' kg';$('date').textContent=r.date||'—';$('notes').textContent=r.notes||'—';$('result').style.display='block';status('Producto encontrado.')}
