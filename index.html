@@ -236,6 +236,18 @@ Detener cámara
  placeholder="Ej. 25"
 >
 
+<label for="requisition" style="display:block;margin-top:14px;font-weight:bold">
+ No. de requisición
+</label>
+
+<input
+ id="requisition"
+ type="text"
+ maxlength="100"
+ autocomplete="off"
+ placeholder="Ej. REQ-2026-001"
+>
+
 <button id="confirmWithdraw">
 Confirmar retiro
 </button>
@@ -380,10 +392,23 @@ async function confirmWithdraw(){
  }
 
  const pounds = Number($('pounds').value);
+ const requisition = $('requisition').value.trim();
  const available = Number(currentProduct.stock);
 
  if(!Number.isFinite(pounds) || pounds <= 0){
   withdrawMessage('Ingresa una cantidad válida de libras.',true);
+  return;
+ }
+
+ if(!requisition){
+  withdrawMessage('Ingresa el número de requisición.',true);
+  $('requisition').focus();
+  return;
+ }
+
+ if(requisition.length > 100){
+  withdrawMessage('El número de requisición no puede superar 100 caracteres.',true);
+  $('requisition').focus();
   return;
  }
 
@@ -398,7 +423,8 @@ async function confirmWithdraw(){
 
  const confirmed = window.confirm(
   '¿Confirmas retirar '+formatPounds(pounds)+
-  ' del producto '+currentProduct.code+'?'
+  ' del producto '+currentProduct.code+
+  '?\nRequisición: '+requisition
  );
 
  if(!confirmed)return;
@@ -420,7 +446,8 @@ async function confirmWithdraw(){
    },
    body:JSON.stringify({
     code:currentProduct.code,
-    pounds:pounds
+    pounds:pounds,
+    requisition:requisition
    })
   });
 
@@ -439,6 +466,7 @@ async function confirmWithdraw(){
   withdrawMessage(
    '¡Retiro registrado correctamente! Se retiraron '+
    formatPounds(data.withdrawn)+
+   '. Requisición: '+requisition+
    '. Existencia restante: '+formatPounds(data.stock)
   );
 
